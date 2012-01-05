@@ -172,16 +172,24 @@ let s:WEB_COLOR_NAMES = [
       \ ]
 " }}}
 
+" Formats for yank and insert.
+let s:formats = {
+      \ 'hex': '#%02x%02x%02x',
+      \ 'rgb': 'rgb(%d,%d,%d)',
+      \ }
+
 let s:source = {
       \ 'name' : 'webcolorname',
       \ 'description' : 'Web color names',
       \ 'syntax': 'uniteSource__webcolorname',
+      \ 'action_table' : {},
       \ 'hooks': {},
       \ }
 
 function! s:source.gather_candidates(args, context)
   let candidates = []
 
+  let index = 0
   for color in s:WEB_COLOR_NAMES
     let hex = call('s:rgb2hex', color.rgb)
     call add(candidates, {
@@ -189,24 +197,96 @@ function! s:source.gather_candidates(args, context)
           \ 'abbr': printf('%-24s (%s)  RGB(%3d,%3d,%3d)', color.name, hex,
           \           color.rgb[0], color.rgb[1], color.rgb[2]),
           \ 'kind': 'word',
+          \ 'source__color_index': index,
           \ })
+    let index = index + 1
   endfor
 
   return candidates
 endfunction
 
+" Hooks {{{
 function! s:source.hooks.on_syntax(args, context)
   for color in s:WEB_COLOR_NAMES
     let hex = call('s:rgb2hex', color.rgb)
-    let index = call('s:get_palette_index', color.rgb)
+    let pindex = call('s:get_palette_index', color.rgb)
 
     let group = 'uniteSource__webcolorname_' . color.name
     let pattern = '/\s*' . color.name . '.*/'
     execute 'syntax match ' . group . ' ' . pattern . ' contained containedin=uniteSource__webcolorname'
     execute 'highlight default ' . group . ' guibg=' . hex . ' guifg=' . color.fg
-          \ . ' ctermfg=' . color.fg . ' ctermbg=' . index
+          \ . ' ctermfg=' . color.fg . ' ctermbg=' . pindex
   endfor
 endfunction
+" }}}
+
+" Actions {{{
+function! s:yank_format(format, candidate)
+  let color = s:WEB_COLOR_NAMES[a:candidate.source__color_index]
+  let @" = printf(a:format, color.rgb[0], color.rgb[1], color.rgb[2])
+endfunction
+
+let s:source.action_table.yank_hex = {
+      \ 'description' : 'yank HEX value "#rrggbb"',
+      \ }
+function! s:source.action_table.yank_hex.func(candidate)
+  call s:yank_format(s:formats.hex, a:candidate)
+endfunction
+
+let s:source.action_table.yank_rgb = {
+      \ 'description': 'yank RGB value "rgb(r,g,b)"',
+      \ }
+function! s:source.action_table.yank_rgb.func(candidate)
+  call s:yank_format(s:formats.rgb, a:candidate)
+endfunction
+
+function! s:insert_format(format, candidate)
+  let color = s:WEB_COLOR_NAMES[a:candidate.source__color_index]
+  let value = printf(a:format, color.rgb[0], color.rgb[1], color.rgb[2])
+
+  let context = unite#get_current_unite().context
+
+  if !context.complete
+    " Paste.
+    let old_reg = @"
+    let @" = value
+    normal! ""p
+    let @" = old_reg
+
+    return
+  endif
+
+  let cur_text = matchstr(getline('.'), '^.*\%'
+        \ . (context.col-1) . 'c.')
+
+  let next_line = getline('.')[context.col :]
+  call setline(line('.'),
+        \ split(cur_text . value . next_line,
+        \            '\n\|\r\n'))
+  let next_col = len(cur_text)+len(value)+1
+  call cursor('', next_col)
+
+  if next_col < col('$')
+    startinsert
+  else
+    startinsert!
+  endif
+endfunction
+
+let s:source.action_table.insert_hex = {
+      \ 'description' : 'insert HEX value "#rrggbb"',
+      \ }
+function! s:source.action_table.insert_hex.func(candidate)
+  call s:insert_format(s:formats.hex, a:candidate)
+endfunction
+
+let s:source.action_table.insert_rgb = {
+      \ 'description' : 'insert RGB value "rgb(r,g,b)"',
+      \ }
+function! s:source.action_table.insert_rgb.func(candidate)
+  call s:insert_format(s:formats.rgb, a:candidate)
+endfunction
+" }}}
 
 function! unite#sources#webcolorname#define()
   return s:source
