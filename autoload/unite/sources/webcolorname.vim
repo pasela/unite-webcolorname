@@ -198,10 +198,13 @@ endfunction
 function! s:source.hooks.on_syntax(args, context)
   for color in s:WEB_COLOR_NAMES
     let hex = call('s:rgb2hex', color.rgb)
+    let index = call('s:get_palette_index', color.rgb)
+
     let group = 'uniteSource__webcolorname_' . color.name
     let pattern = '/\s*' . color.name . '.*/'
     execute 'syntax match ' . group . ' ' . pattern . ' contained containedin=uniteSource__webcolorname'
     execute 'highlight default ' . group . ' guibg=' . hex . ' guifg=' . color.fg
+          \ . ' ctermfg=' . color.fg . ' ctermbg=' . index
   endfor
 endfunction
 
@@ -228,6 +231,191 @@ function! s:hex2rgb(rrggbb)
         \ ("0x" . strpart(a:rrggbb, 2 + offset, 2)) + 0,
         \ ("0x" . strpart(a:rrggbb, 4 + offset, 2)) + 0
         \ ]
+endfunction
+
+" returns an approximate grey index for the given grey level
+function! s:grey_level2number(x)
+  if &t_Co == 88
+    if a:x < 23
+      return 0
+    elseif a:x < 69
+      return 1
+    elseif a:x < 103
+      return 2
+    elseif a:x < 127
+      return 3
+    elseif a:x < 150
+      return 4
+    elseif a:x < 173
+      return 5
+    elseif a:x < 196
+      return 6
+    elseif a:x < 219
+      return 7
+    elseif a:x < 243
+      return 8
+    else
+      return 9
+    endif
+  else
+    if a:x < 14
+      return 0
+    else
+      let l:n = (a:x - 8) / 10
+      let l:m = (a:x - 8) % 10
+      if l:m < 5
+        return l:n
+      else
+        return l:n + 1
+      endif
+    endif
+  endif
+endfunction
+
+" returns the actual grey level represented by the grey index
+function! s:grey_number2level(n)
+  if &t_Co == 88
+    if a:n == 0
+      return 0
+    elseif a:n == 1
+      return 46
+    elseif a:n == 2
+      return 92
+    elseif a:n == 3
+      return 115
+    elseif a:n == 4
+      return 139
+    elseif a:n == 5
+      return 162
+    elseif a:n == 6
+      return 185
+    elseif a:n == 7
+      return 208
+    elseif a:n == 8
+      return 231
+    else
+      return 255
+    endif
+  else
+    if a:n == 0
+      return 0
+    else
+      return 8 + (a:n * 10)
+    endif
+  endif
+endfunction
+
+" returns the palette index for the given grey index
+function! s:grey_color2index(n)
+  if &t_Co == 88
+    if a:n == 0
+      return 16
+    elseif a:n == 9
+      return 79
+    else
+      return 79 + a:n
+    endif
+  else
+    if a:n == 0
+      return 16
+    elseif a:n == 25
+      return 231
+    else
+      return 231 + a:n
+    endif
+  endif
+endfunction
+
+" returns an approximate color index for the given color level
+function! s:rgb_level2number(x)
+  if &t_Co == 88
+    if a:x < 69
+      return 0
+    elseif a:x < 172
+      return 1
+    elseif a:x < 230
+      return 2
+    else
+      return 3
+    endif
+  else
+    if a:x < 75
+      return 0
+    else
+      let l:n = (a:x - 55) / 40
+      let l:m = (a:x - 55) % 40
+      if l:m < 20
+        return l:n
+      else
+        return l:n + 1
+      endif
+    endif
+  endif
+endfunction
+
+" returns the actual color level for the given color index
+function! s:rgb_number2level(n)
+  if &t_Co == 88
+    if a:n == 0
+      return 0
+    elseif a:n == 1
+      return 139
+    elseif a:n == 2
+      return 205
+    else
+      return 255
+    endif
+  else
+    if a:n == 0
+      return 0
+    else
+      return 55 + (a:n * 40)
+    endif
+  endif
+endfunction
+
+" returns the palette index for the given R/G/B color indices
+function! s:rgb_color2index(x, y, z)
+  if &t_Co == 88
+    return 16 + (a:x * 16) + (a:y * 4) + a:z
+  else
+    return 16 + (a:x * 36) + (a:y * 6) + a:z
+  endif
+endfunction
+
+" returns the palette index to approximate the given R/G/B color levels
+function! s:get_palette_index(r, g, b)
+  " get the closest grey
+  let l:gx = s:grey_level2number(a:r)
+  let l:gy = s:grey_level2number(a:g)
+  let l:gz = s:grey_level2number(a:b)
+
+  " get the closest color
+  let l:x = s:rgb_level2number(a:r)
+  let l:y = s:rgb_level2number(a:g)
+  let l:z = s:rgb_level2number(a:b)
+
+  if l:gx == l:gy && l:gy == l:gz
+    " there are two possibilities
+    let l:dgr = s:grey_number2level(l:gx) - a:r
+    let l:dgg = s:grey_number2level(l:gy) - a:g
+    let l:dgb = s:grey_number2level(l:gz) - a:b
+    let l:dgrey = (l:dgr * l:dgr) + (l:dgg * l:dgg) + (l:dgb * l:dgb)
+    let l:dr = s:rgb_number2level(l:gx) - a:r
+    let l:dg = s:rgb_number2level(l:gy) - a:g
+    let l:db = s:rgb_number2level(l:gz) - a:b
+    let l:drgb = (l:dr * l:dr) + (l:dg * l:dg) + (l:db * l:db)
+    if l:dgrey < l:drgb
+      " use the grey
+      return s:grey_color2index(l:gx)
+    else
+      " use the color
+      return s:rgb_color2index(l:x, l:y, l:z)
+    endif
+  else
+    " only one possibility
+    return s:rgb_color2index(l:x, l:y, l:z)
+  endif
 endfunction
 
 " }}}
