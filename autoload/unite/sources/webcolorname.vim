@@ -186,6 +186,10 @@ let s:source = {
       \ 'hooks': {},
       \ }
 
+function! s:candidates_alphabetical_comp(lhs, rhs)
+  return a:lhs.word ==? a:rhs.word ? 0 : a:lhs.word >? a:rhs.word ? 1 : -1
+endfunction
+
 function! s:source.gather_candidates(args, context)
   let candidates = []
 
@@ -201,6 +205,10 @@ function! s:source.gather_candidates(args, context)
           \ })
     let index = index + 1
   endfor
+
+  if get(a:args, 0, '') ==? 'sort'
+    let candidates = sort(candidates, 's:candidates_alphabetical_comp')
+  endif
 
   return candidates
 endfunction
