@@ -212,7 +212,7 @@ function! s:source.hooks.on_syntax(args, context)
     let pindex = call('s:get_palette_index', color.rgb)
 
     let group = 'uniteSource__webcolorname_' . color.name
-    let pattern = '/\s*' . color.name . '.*/'
+    let pattern = '/\s*\<' . color.name . '\>.*/'
     execute 'syntax match ' . group . ' ' . pattern . ' contained containedin=uniteSource__webcolorname'
     execute 'highlight default ' . group . ' guibg=' . hex . ' guifg=' . color.fg
           \ . ' ctermfg=' . color.fg . ' ctermbg=' . pindex
